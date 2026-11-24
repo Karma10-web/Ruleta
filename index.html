@@ -95,7 +95,14 @@ const D=()=>({title:'ROKO RULETA',e1:'🎰',e2:'🎰',hub:'',ptr:'#8b5cf6',bg:'#
  hist:[],last:null,prev:null,obs:{show:true,src:'last',lay:'h',size:100,px:'center',py:'center',bg:'transparent',ch:randCh()}});
 let S;try{S={...D(),...JSON.parse(localStorage[K])}}catch(e){S=D()}
 S.obs={...D().obs,...S.obs};if(!S.obs.ch)S.obs.ch=randCh();
-if(!S.prev&&Array.isArray(S.hist)&&S.hist.length>1)S.prev={...S.hist[1],ts:S.hist[1].id||Date.now()-1};
+
+const syncPrevFromHist=()=>{
+ if(!Array.isArray(S.hist)||!S.hist.length)return;
+ if(!S.last)S.last={...S.hist[0],ts:S.last?.ts||Date.now()};
+ const candidate=S.hist.find(h=>!S.last||h.id!==S.last.id||h.time!==S.last.time)||S.hist[1]||null;
+ if(candidate)S.prev={...candidate,ts:S.prev?.ts||Date.now()-1};
+};
+syncPrevFromHist();
 
 const hashStr=location.hash.slice(1);
 const qIdx=hashStr.indexOf('?');
@@ -110,6 +117,7 @@ const topic=c=>`https://ntfy.sh/${encodeURIComponent(c)}`;
 let lastPush=0;
 function pushObs(force){
  if(OBS)return;
+ syncPrevFromHist();
  const now=Date.now();
  if(!force&&now-lastPush<180)return;
  lastPush=now;
@@ -117,9 +125,10 @@ function pushObs(force){
  try{fetch(topic(S.obs.ch),{method:'POST',body:JSON.stringify(payload)}).catch(()=>{})}catch(e){}
 }
 function save(sync){
+ syncPrevFromHist();
  try{localStorage[K]=JSON.stringify(S)}catch(e){toast('Almacenamiento lleno: usa imágenes más pequeñas')}
  bc&&bc.postMessage(1);
- if(sync)pushObs(false);
+ if(sync)pushObs(true);
 }
 function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>t.style.display='none',2500)}
 function obsUrl(){return `${location.href.split('#')[0]}#obs?ch=${encodeURIComponent(S.obs.ch)}`}
@@ -154,9 +163,9 @@ function spin(){if(spinning)return;const a=act();if(!a.length)return toast('Acti
   if(p<1)requestAnimationFrame(f);else{spinning=false;$('#spin').disabled=false;win(a[wi],T?ws[wi]/T*100:100/a.length)}})(t0)}
 function win(s,p){const nowTs=Date.now();
  const h={id:nowTs,t:s.t,c:s.c,img:s.img,ico:s.ico,p:+p.toFixed(1),time:new Date().toLocaleTimeString()};
- if(S.last)S.prev={...S.last,ts:S.last.ts||nowTs-1};
+ if(S.last)S.prev={...S.last,ts:nowTs-1};
  S.hist.unshift(h);S.hist=S.hist.slice(0,200);S.last={...h,ts:nowTs};
- if(!S.prev&&S.hist[1])S.prev={...S.hist[1],ts:(S.hist[1].id||nowTs)-1};
+ if(!S.prev&&S.hist[1])S.prev={...S.hist[1],ts:nowTs-1};
  if(S.hide)s.on=false;ref(true);
  $('#mc').innerHTML=`<div class="big" style="background-color:${s.c};${s.img?`background-image:url('${esc(s.img)}')`:''}">${s.img?'':s.ico}</div><h2>${esc(s.t)}</h2><small>${h.p}%</small>`;
  $('#modal>div').style.borderColor=s.c;$('#modal').classList.add('on');confetti();[523,659,784,1046].forEach((f,i)=>setTimeout(()=>beep(f,.25,.12,'triangle'),i*120))}
@@ -200,11 +209,11 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b
  else if(a=='syncobs'){pushObs(true);toast('Enviado al OBS');return}
  else if(a=='copy'){const u=obsUrl();navigator.clipboard.writeText(u).then(()=>toast('Enlace OBS copiado'),()=>prompt('Copia el enlace:',u));return}
  else if(a=='open')return window.open(obsUrl(),'_blank');
- else if(a=='send'){const h=S.hist[+b.closest('[data-h]').dataset.h];if(S.last&&S.last.id!==h.id)S.prev={...S.last,ts:S.last.ts||Date.now()-1};S.last={...h,ts:Date.now()};ref(true);toast('Enviado al OBS');return}
+ else if(a=='send'){const idx=+b.closest('[data-h]').dataset.h,h=S.hist[idx];if(S.last&&(S.last.id!==h.id||S.last.time!==h.time))S.prev={...S.last,ts:Date.now()-1};else if(S.hist[idx+1])S.prev={...S.hist[idx+1],ts:Date.now()-1};S.last={...h,ts:Date.now()};ref(true);toast('Enviado al OBS');return}
  else if(a=='hdel')S.hist.splice(+b.closest('[data-h]').dataset.h,1);
  else if(a=='clr'){if(confirm('¿Borrar todo el historial?')){S.hist=[];S.last=null;S.prev=null;ref(true);return}}
  else if(a=='exp'){const l=document.createElement('a');l.href=URL.createObjectURL(new Blob([JSON.stringify(S,null,1)],{type:'application/json'}));l.download='ruleta-config.json';l.click();return}
- else if(a=='imp'){const f=document.createElement('input');f.type='file';f.accept='.json';f.onchange=()=>f.files[0].text().then(t=>{try{S={...D(),...JSON.parse(t)};S.obs={...D().obs,...S.obs};if(!S.obs.ch)S.obs.ch=randCh();ui();ref(true)}catch(x){toast('JSON no válido')}});f.click();return}
+ else if(a=='imp'){const f=document.createElement('input');f.type='file';f.accept='.json';f.onchange=()=>f.files[0].text().then(t=>{try{S={...D(),...JSON.parse(t)};S.obs={...D().obs,...S.obs};if(!S.obs.ch)S.obs.ch=randCh();syncPrevFromHist();ui();ref(true)}catch(x){toast('JSON no válido')}});f.click();return}
  ref(false)});
 
 document.addEventListener('change',e=>{const t=e.target,f=t.dataset.f,k=t.dataset.s,o=t.dataset.o,v=t.type=='checkbox'?t.checked:t.value;
