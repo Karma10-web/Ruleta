@@ -41,7 +41,7 @@ body.obs main,body.obs aside,body.obs #modal,body.obs #toast{display:none}
 #o{display:none;align-items:center;gap:.4em;padding:.35em .8em .35em .35em;border:.1em solid;border-radius:3em;background:#000a;font-family:Impact,'Arial Black',system-ui,sans-serif}
 #o.v{flex-direction:column;padding:.6em 1em;border-radius:1em;text-align:center}#o.in{animation:pop .6s cubic-bezier(.2,1.4,.4,1)}
 #oi{width:2.8em;height:2.8em;border-radius:50%;border:.1em solid #fff;background-size:cover;background-position:center;display:grid;place-items:center;flex:none}
-#ot{font-size:1.7em;letter-spacing:.04em;color:#fff;-webkit-text-stroke:.07em #000;paint-order:stroke fill;text-shadow:0 .05em .15em #000}
+#ot{font-size:1.7em;letter-spacing:.04em;color:#fff;-webkit-text-stroke:.07em #000;paint-order:stroke fill;text-shadow:0 .05em .15em #000;text-align:left}
 </style></head><body>
 <main>
  <h1><span id="e1" contenteditable></span> <span id="tt" contenteditable></span> <span id="e2" contenteditable></span></h1>
@@ -66,6 +66,7 @@ body.obs main,body.obs aside,body.obs #modal,body.obs #toast{display:none}
 
  <h3>Overlay OBS</h3>
  <label>Mostrar <input type="checkbox" data-o="show"></label>
+ <label>Tirada a mostrar <select data-o="src"><option value="last">Actual (última tirada)</option><option value="prev">Show last (ANTERIOR)</option></select></label>
  <label>Diseño <select data-o="lay"><option value="h">Horizontal [Imagen] TEXTO</option><option value="v">Vertical</option></select></label>
  <label>Tamaño <input type="range" min="40" max="220" data-o="size"></label>
  <label>Posición horizontal <select data-o="px"><option value="flex-start">Izquierda</option><option value="center">Centro</option><option value="flex-end">Derecha</option></select></label>
@@ -91,9 +92,10 @@ const lum=c=>{const n=parseInt((c||'#111111').slice(1),16);return .299*(n>>16)+.
 const randCh=()=>'roko-'+Math.random().toString(36).slice(2,10)+'-'+Math.random().toString(36).slice(2,6);
 const D=()=>({title:'ROKO RULETA',e1:'🎰',e2:'🎰',hub:'',ptr:'#8b5cf6',bg:'#14121c',btn:'#facc15',mode:'prop',hide:false,mute:false,
  segs:[['VALORANT','#ff5a5f'],['Rocket L','#1e3a8a'],['HANDICAP','#f59e0b','♿'],['RESET','#111111','💀'],['LoL','#a78bfa'],['Clash Royale','#14b8a6'],['CS:GO','#92400e'],['PREMIO 0/5','#16a34a','💵']].map(([t,c,i],n)=>({id:n+1,t,c,ico:i||'',img:'',w:12.5,on:true})),
- hist:[],last:null,obs:{show:true,lay:'h',size:100,px:'center',py:'center',bg:'transparent',ch:randCh()}});
+ hist:[],last:null,prev:null,obs:{show:true,src:'last',lay:'h',size:100,px:'center',py:'center',bg:'transparent',ch:randCh()}});
 let S;try{S={...D(),...JSON.parse(localStorage[K])}}catch(e){S=D()}
 S.obs={...D().obs,...S.obs};if(!S.obs.ch)S.obs.ch=randCh();
+if(!S.prev&&Array.isArray(S.hist)&&S.hist.length>1)S.prev={...S.hist[1],ts:S.hist[1].id||Date.now()-1};
 
 const hashStr=location.hash.slice(1);
 const qIdx=hashStr.indexOf('?');
@@ -111,7 +113,7 @@ function pushObs(force){
  const now=Date.now();
  if(!force&&now-lastPush<180)return;
  lastPush=now;
- const payload={obs:{show:S.obs.show,lay:S.obs.lay,size:S.obs.size,px:S.obs.px,py:S.obs.py,bg:S.obs.bg},last:S.last};
+ const payload={obs:{show:S.obs.show,src:S.obs.src,lay:S.obs.lay,size:S.obs.size,px:S.obs.px,py:S.obs.py,bg:S.obs.bg},last:S.last,prev:S.prev};
  try{fetch(topic(S.obs.ch),{method:'POST',body:JSON.stringify(payload)}).catch(()=>{})}catch(e){}
 }
 function save(sync){
@@ -150,8 +152,12 @@ function spin(){if(spinning)return;const a=act();if(!a.length)return toast('Acti
  spinning=true;$('#spin').disabled=true;
  (function f(n){const p=Math.min(1,(n-t0)/dur);rot=from+(to-from)*(1-Math.pow(1-p,4));const k=idxAt(rot);if(k!=last){last=k;beep(900,.04)}draw();
   if(p<1)requestAnimationFrame(f);else{spinning=false;$('#spin').disabled=false;win(a[wi],T?ws[wi]/T*100:100/a.length)}})(t0)}
-function win(s,p){const h={id:Date.now(),t:s.t,c:s.c,img:s.img,ico:s.ico,p:+p.toFixed(1),time:new Date().toLocaleTimeString()};
- S.hist.unshift(h);S.hist=S.hist.slice(0,200);S.last={...h,ts:Date.now()};if(S.hide)s.on=false;ref(true);
+function win(s,p){const nowTs=Date.now();
+ const h={id:nowTs,t:s.t,c:s.c,img:s.img,ico:s.ico,p:+p.toFixed(1),time:new Date().toLocaleTimeString()};
+ if(S.last)S.prev={...S.last,ts:S.last.ts||nowTs-1};
+ S.hist.unshift(h);S.hist=S.hist.slice(0,200);S.last={...h,ts:nowTs};
+ if(!S.prev&&S.hist[1])S.prev={...S.hist[1],ts:(S.hist[1].id||nowTs)-1};
+ if(S.hide)s.on=false;ref(true);
  $('#mc').innerHTML=`<div class="big" style="background-color:${s.c};${s.img?`background-image:url('${esc(s.img)}')`:''}">${s.img?'':s.ico}</div><h2>${esc(s.t)}</h2><small>${h.p}%</small>`;
  $('#modal>div').style.borderColor=s.c;$('#modal').classList.add('on');confetti();[523,659,784,1046].forEach((f,i)=>setTimeout(()=>beep(f,.25,.12,'triangle'),i*120))}
 $('#modal').onclick=()=>$('#modal').classList.remove('on');
@@ -194,9 +200,9 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b
  else if(a=='syncobs'){pushObs(true);toast('Enviado al OBS');return}
  else if(a=='copy'){const u=obsUrl();navigator.clipboard.writeText(u).then(()=>toast('Enlace OBS copiado'),()=>prompt('Copia el enlace:',u));return}
  else if(a=='open')return window.open(obsUrl(),'_blank');
- else if(a=='send'){const h=S.hist[+b.closest('[data-h]').dataset.h];S.last={...h,ts:Date.now()};ref(true);toast('Enviado al OBS');return}
+ else if(a=='send'){const h=S.hist[+b.closest('[data-h]').dataset.h];if(S.last&&S.last.id!==h.id)S.prev={...S.last,ts:S.last.ts||Date.now()-1};S.last={...h,ts:Date.now()};ref(true);toast('Enviado al OBS');return}
  else if(a=='hdel')S.hist.splice(+b.closest('[data-h]').dataset.h,1);
- else if(a=='clr'){if(confirm('¿Borrar todo el historial?'))S.hist=[]}
+ else if(a=='clr'){if(confirm('¿Borrar todo el historial?')){S.hist=[];S.last=null;S.prev=null;ref(true);return}}
  else if(a=='exp'){const l=document.createElement('a');l.href=URL.createObjectURL(new Blob([JSON.stringify(S,null,1)],{type:'application/json'}));l.download='ruleta-config.json';l.click();return}
  else if(a=='imp'){const f=document.createElement('input');f.type='file';f.accept='.json';f.onchange=()=>f.files[0].text().then(t=>{try{S={...D(),...JSON.parse(t)};S.obs={...D().obs,...S.obs};if(!S.obs.ch)S.obs.ch=randCh();ui();ref(true)}catch(x){toast('JSON no válido')}});f.click();return}
  ref(false)});
@@ -212,21 +218,26 @@ if(!OBS){ui();ref(false)}
 else{
  document.body.className='obs';
  const o=$('#o'),oi=$('#oi'),ot=$('#ot');
- let seen=0,remote=null;
- try{const saved=JSON.parse(localStorage[K]||'null');if(saved&&(saved.last||saved.obs))remote={obs:saved.obs,last:saved.last}}catch(e){}
+ let seen='',remote=null;
+ try{const saved=JSON.parse(localStorage[K]||'null');if(saved&&(saved.last||saved.prev||saved.obs))remote={obs:saved.obs,last:saved.last,prev:saved.prev}}catch(e){}
  const render=()=>{
   let loc={};try{loc=JSON.parse(localStorage[K])||{}}catch(e){}
-  const src=remote||{obs:loc.obs,last:loc.last};
-  const ob={...D().obs,...(src&&src.obs||{})},L=src&&src.last,b=document.body.style;
+  const src=remote||{obs:loc.obs,last:loc.last,prev:loc.prev};
+  const ob={...D().obs,...(src&&src.obs||{})};
+  const isPrev=ob.src==='prev';
+  const item=isPrev?(src&&(src.prev||src.last)):(src&&(src.last||src.prev));
+  const b=document.body.style;
   b.background=ob.bg;b.justifyContent=ob.px;b.alignItems=ob.py;
-  if(!L||!ob.show){o.style.display='none';return}
-  o.style.display='flex';o.style.fontSize=ob.size/100*34+'px';o.style.borderColor=L.c||'#8b5cf6';o.classList.toggle('v',ob.lay=='v');
-  oi.style.backgroundColor=L.c||'#8b5cf6';oi.style.backgroundImage=L.img?`url("${String(L.img).replace(/"/g,'%22')}")`:'none';oi.textContent=L.img?'':(L.ico||'');ot.textContent=L.t||'';
-  if(L.ts&&L.ts!==seen){seen=L.ts;o.classList.remove('in');void o.offsetWidth;o.classList.add('in')}
+  if(!item||!ob.show){o.style.display='none';return}
+  o.style.display='flex';o.style.fontSize=ob.size/100*34+'px';o.style.borderColor=item.c||'#8b5cf6';o.classList.toggle('v',ob.lay=='v');
+  oi.style.backgroundColor=item.c||'#8b5cf6';oi.style.backgroundImage=item.img?`url("${String(item.img).replace(/"/g,'%22')}")`:'none';oi.textContent=item.img?'':(item.ico||'');
+  ot.textContent=isPrev?'ANTERIOR':(item.t||'');
+  const mark=`${ob.src||'last'}:${item.ts||item.id||item.t}`;
+  if(mark&&mark!==seen){seen=mark;o.classList.remove('in');void o.offsetWidth;o.classList.add('in')}
  };
  const applyMsg=raw=>{
   if(!raw)return;
-  try{const d=JSON.parse(raw);if(d&&(d.last||d.obs)){remote={...remote,...d};try{localStorage[K]=JSON.stringify({...(JSON.parse(localStorage[K])||{}),...remote})}catch(e){}render()}}catch(e){}
+  try{const d=JSON.parse(raw);if(d&&(d.last||d.prev||d.obs)){remote={...remote,...d};try{localStorage[K]=JSON.stringify({...(JSON.parse(localStorage[K])||{}),...remote})}catch(e){}render()}}catch(e){}
  };
  addEventListener('storage',e=>{if(e.key==K||e.key===null)render()});
  bc&&(bc.onmessage=render);
